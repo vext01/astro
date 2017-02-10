@@ -90,12 +90,23 @@ impl<'a> CompilerCalls<'a> for ASTDumper {
 }
 
 struct ASTVisitor {
+    level: usize,
 }
 
 impl ASTVisitor {
     fn new() -> ASTVisitor {
         ASTVisitor {
+            level: 0,
         }
+    }
+
+    fn indent(&self) {
+        print!("{}", (0..self.level).map(|_| "  ").collect::<String>());
+    }
+
+    fn traverse_block(&mut self, blk: ast::Block) {
+        self.indent();
+        println!("Block: {} at line {}", blk.id, blk.span.lo.0);
     }
 }
 
@@ -108,8 +119,11 @@ impl<'a> visit::Visitor<'a> for ASTVisitor {
         // Note that `Block`s are not `Item`s, so we won't find any `Block`s at
         // this level. We will have to search deeper.
         match i.node {
-            ast::ItemKind::Fn(_, _, _, _, _, _) => {
+            ast::ItemKind::Fn(_, _, _, _, _, ref block_p) => {
                 println!("Function: {}", i.ident);
+                self.level += 1;
+                self.traverse_block(block_p.clone().unwrap());
+                self.level -= 1;
             }
             _ => {},
         }
