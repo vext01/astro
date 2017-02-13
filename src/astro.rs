@@ -23,8 +23,11 @@ use rustc::session::config::{self, Input, ErrorOutputType};
 use rustc_driver::{driver, CompilerCalls, Compilation, RustcDefaultCalls};
 
 use syntax::{ast, visit, errors};
+use syntax::ext::quote::rt;
 
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
+use std::fs::File;
+use std::io::prelude::*;
 
 
 struct ASTDumper {
@@ -81,7 +84,11 @@ impl<'a> CompilerCalls<'a> for ASTDumper {
         control.after_parse.stop = Compilation::Stop;
         control.after_parse.callback = box |state: &mut driver::CompileState| {
             let krate = state.krate.as_ref();
-            let mut visitor = ASTVisitor::new();
+            let filepath = match state.input {
+                &Input::File(ref pb) => pb.as_path(),
+                _ => panic!("not file"),
+            };
+            let mut visitor = ASTVisitor::new(filepath);
             visit::walk_crate(&mut visitor, &krate.unwrap());
         };
 
@@ -91,12 +98,23 @@ impl<'a> CompilerCalls<'a> for ASTDumper {
 
 struct ASTVisitor {
     level: usize,
+    source: String,
 }
 
 impl ASTVisitor {
-    fn new() -> ASTVisitor {
+    fn new(filepath: &Path) -> ASTVisitor {
+        let mut fh = match File::open(filepath) {
+            Ok(fh) => fh,
+            _ => panic!("failed to open source file"),
+        };
+        let mut source = String::new();
+        match fh.read_to_string(&mut source) {
+            Ok(_) => {},
+            _ => panic!("failed to read source file"),
+        }
         ASTVisitor {
             level: 0,
+            source: source,
         }
     }
 
@@ -104,9 +122,54 @@ impl ASTVisitor {
         print!("{}", (0..self.level).map(|_| "  ").collect::<String>());
     }
 
+    fn traverse_item(&mut self, item: &ast::Item) {
+        match item.node {
+            ast::ItemKind::Fn(_, _, _, _, _, ref block_p) => {
+                self.indent();
+                println!("Function: {}", item.ident);
+                self.level += 1;
+                self.traverse_block(block_p.clone().unwrap());
+                self.level -= 1;
+            }
+            _ => {},
+        }
+    }
+
+    fn print_span(&self, span: &rt::Span) {
+        // print the first line of a span to help me understand
+        self.indent();
+        println!("---8<---");
+        let slice = &self.source[(span.lo.0 as usize)..(span.hi.0 as usize)];
+        let lines = slice.split("\n");
+        for line in lines {
+            self.indent();
+            println!("{}", line);
+        }
+        self.indent();
+        println!("--->8---\n");
+    }
+
+    fn traverse_stmt(&mut self, stmt: &ast::Stmt) {
+        self.indent();
+        println!("Statement at char {}", stmt.span.lo.0);
+        self.print_span(&stmt.span);
+        self.level += 1;
+        match stmt.node {
+            ast::StmtKind::Item(ref item_p) => {
+                self.traverse_item(&item_p.clone().unwrap());
+            }
+            _ => {},
+        }
+        self.level -= 1;
+    }
+
     fn traverse_block(&mut self, blk: ast::Block) {
         self.indent();
-        println!("Block: {} at line {}", blk.id, blk.span.lo.0);
+        println!("Block: {} at char {}", blk.id, blk.span.lo.0);
+
+        for stmt in blk.stmts {
+            self.traverse_stmt(&stmt);
+        }
     }
 }
 
@@ -115,19 +178,9 @@ impl<'a> visit::Visitor<'a> for ASTVisitor {
      * Hook into the AST walker, looking for functions to analyse
      */
 
-    fn visit_item(&mut self, i: &ast::Item) {
-        // Note that `Block`s are not `Item`s, so we won't find any `Block`s at
-        // this level. We will have to search deeper.
-        match i.node {
-            ast::ItemKind::Fn(_, _, _, _, _, ref block_p) => {
-                println!("Function: {}", i.ident);
-                self.level += 1;
-                self.traverse_block(block_p.clone().unwrap());
-                self.level -= 1;
-            }
-            _ => {},
-        }
-        visit::walk_item(self, i)
+    fn visit_item(&mut self, item: &ast::Item) {
+        self.traverse_item(item);
+        visit::walk_item(self, item)
     }
 
     fn visit_mac(&mut self, mac: &ast::Mac) {
