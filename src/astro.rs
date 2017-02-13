@@ -102,11 +102,19 @@ struct ASTVisitor {
     source: String,
 }
 
-// Same as println, just with a self.level indent
+// An indented println!
 macro_rules! iprintln {
     ($slf:expr, $($ps:expr),*) => {{
-        print!("{}", (0..$slf.level).map(|_| "    ").collect::<String>());
+        print!("{}", (0..$slf.level).map(|_| "  ").collect::<String>());
         println!( $($ps),* );
+    }};
+}
+
+// An indented print!
+macro_rules! iprint {
+    ($slf:expr, $($ps:expr),*) => {{
+        print!("{}", (0..$slf.level).map(|_| "  ").collect::<String>());
+        print!( $($ps),* );
     }};
 }
 
@@ -138,7 +146,7 @@ impl ASTVisitor {
     fn traverse_item(&mut self, item: &Item) {
         match item.node {
             ItemKind::Fn(_, _, _, _, _, ref block_p) => {
-                iprintln!(self, "+Function: {}", item.ident);
+                iprintln!(self, "+Function {}", item.ident);
                 self.indent();
                 self.traverse_block(block_p.clone().unwrap());
                 self.dedent();
@@ -155,7 +163,7 @@ impl ASTVisitor {
     }
 
     fn traverse_stmt(&mut self, stmt: &Stmt) {
-        iprintln!(self, "+Statement at char {}", stmt.span.lo.0);
+        iprint!(self, "+Statement: ");
         self.print_span(&stmt.span);
         self.indent();
         match stmt.node {
@@ -170,27 +178,27 @@ impl ASTVisitor {
     }
 
     fn traverse_expr(&mut self, expr: &Expr) {
+        iprint!(self, "+Expr: ");
         self.print_span(&expr.span);
         match &expr.node {
             &ExprKind::If(_, ref blk_p, ref else_o) => {
-                iprintln!(self, "+If Expr: {} at char {}", expr.id, expr.span.lo.0);
-                self.print_span(&expr.span);
-                iprintln!(self, "True arm:");
+                self.indent();
                 self.traverse_block(blk_p.clone().unwrap());
                 match else_o {
                     &Some(ref expr_p) => {
-                        iprintln!(self, "Else arm:");
                         self.traverse_expr(&expr_p.clone().unwrap());
                     }
                     _ => {},
                 }
-            }
+                self.dedent();
+            },
+            &ExprKind::Block(ref blk_p) => self.traverse_block(blk_p.clone().unwrap()),
             _ => {},
         }
     }
 
     fn traverse_block(&mut self, blk: Block) {
-        iprintln!(self, "+Block: {} at char {}", blk.id, blk.span.lo.0);
+        iprintln!(self, "+Block");
         self.indent();
         for stmt in blk.stmts {
             self.traverse_stmt(&stmt);
