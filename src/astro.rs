@@ -147,9 +147,7 @@ impl ASTVisitor {
         match item.node {
             ItemKind::Fn(_, _, _, _, _, ref block_p) => {
                 iprintln!(self, "+Function {}", item.ident);
-                self.indent();
                 self.traverse_block(block_p.clone().unwrap());
-                self.dedent();
             }
             _ => {},
         }
@@ -159,30 +157,35 @@ impl ASTVisitor {
         // print the first line of a span to help me understand
         let slice = &self.source[(span.lo.0 as usize)..(span.hi.0 as usize)];
         let mut lines = slice.split("\n");
-        iprintln!(self, "`{}`...", lines.next().unwrap());
+        println!("`{}`...", lines.next().unwrap());
     }
 
     fn traverse_stmt(&mut self, stmt: &Stmt) {
-        iprint!(self, "+Statement: ");
-        self.print_span(&stmt.span);
-        self.indent();
+        iprint!(self, "+Stmt: ");
         match stmt.node {
-            StmtKind::Item(ref item_p) =>
-                self.traverse_item(&item_p.clone().unwrap()),
-            StmtKind::Expr(ref expr_p) =>
-                self.traverse_expr(&expr_p.clone().unwrap()),
-            _ => {},
+            StmtKind::Item(ref item_p) => {
+                print!("Item: ");
+                self.print_span(&stmt.span);
+                self.traverse_item(&item_p.clone().unwrap());
+            }
+            StmtKind::Expr(ref expr_p) => {
+                print!("Expr: ");
+                self.print_span(&stmt.span);
+                self.traverse_expr(&expr_p.clone().unwrap());
+            }
+            _ => {
+                print!("Unknown: ");
+                self.print_span(&stmt.span);
+            },
         }
-        self.dedent();
-
     }
 
     fn traverse_expr(&mut self, expr: &Expr) {
         iprint!(self, "+Expr: ");
-        self.print_span(&expr.span);
         match &expr.node {
             &ExprKind::If(_, ref blk_p, ref else_o) => {
-                self.indent();
+                print!("If: ");
+                self.print_span(&expr.span);
                 self.traverse_block(blk_p.clone().unwrap());
                 match else_o {
                     &Some(ref expr_p) => {
@@ -190,15 +193,37 @@ impl ASTVisitor {
                     }
                     _ => {},
                 }
-                self.dedent();
             },
-            &ExprKind::Block(ref blk_p) => self.traverse_block(blk_p.clone().unwrap()),
-            _ => {},
+            &ExprKind::Block(ref blk_p) => {
+                print!("Block: ");
+                self.print_span(&expr.span);
+                self.traverse_block(blk_p.clone().unwrap());
+            }
+            &ExprKind::Loop(ref blk_p, _) => {
+                print!("Loop: ");
+                self.print_span(&expr.span);
+                self.traverse_block(blk_p.clone().unwrap());
+            }
+            &ExprKind::ForLoop(_, _, ref blk_p, _) => {
+                print!("ForLoop: ");
+                self.print_span(&expr.span);
+                self.traverse_block(blk_p.clone().unwrap());
+            }
+            &ExprKind::While(_, ref blk_p, _) => {
+                print!("While: ");
+                self.print_span(&expr.span);
+                self.traverse_block(blk_p.clone().unwrap());
+            }
+            _ => {
+                print!("Unknown: ");
+                self.print_span(&expr.span);
+            },
         }
     }
 
     fn traverse_block(&mut self, blk: Block) {
-        iprintln!(self, "+Block");
+        iprint!(self, "+Block");
+        self.print_span(&blk.span);
         self.indent();
         for stmt in blk.stmts {
             self.traverse_stmt(&stmt);
