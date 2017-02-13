@@ -22,8 +22,7 @@ use rustc::session::Session;
 use rustc::session::config::{self, Input, ErrorOutputType};
 use rustc_driver::{driver, CompilerCalls, Compilation, RustcDefaultCalls};
 
-use syntax::ast::{Expr, ExprKind, Stmt, StmtKind, Block, Item};
-use syntax::ptr::P;
+use syntax::ast::{Expr, ExprKind, Stmt, StmtKind, Block, Item, ItemKind};
 use syntax::{ast, visit, errors};
 use syntax::ext::quote::rt;
 
@@ -173,7 +172,7 @@ impl ASTVisitor {
     fn traverse_expr(&mut self, expr: &Expr) {
         self.print_span(&expr.span);
         match &expr.node {
-            &ExprKind::If(ref expr_p, ref blk_p, ref else_o) => {
+            &ExprKind::If(_, ref blk_p, ref else_o) => {
                 iprintln!(self, "+If Expr: {} at char {}", expr.id, expr.span.lo.0);
                 self.print_span(&expr.span);
                 iprintln!(self, "True arm:");
