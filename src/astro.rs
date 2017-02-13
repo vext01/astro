@@ -22,6 +22,8 @@ use rustc::session::Session;
 use rustc::session::config::{self, Input, ErrorOutputType};
 use rustc_driver::{driver, CompilerCalls, Compilation, RustcDefaultCalls};
 
+use syntax::ast::{Expr, ExprKind, Stmt, StmtKind, Block, Item};
+use syntax::ptr::P;
 use syntax::{ast, visit, errors};
 use syntax::ext::quote::rt;
 
@@ -101,6 +103,14 @@ struct ASTVisitor {
     source: String,
 }
 
+// Same as println, just with a self.level indent
+macro_rules! iprintln {
+    ($slf:expr, $($ps:expr),*) => {{
+        print!("{}", (0..$slf.level).map(|_| "    ").collect::<String>());
+        println!( $($ps),* );
+    }};
+}
+
 impl ASTVisitor {
     fn new(filepath: &Path) -> ASTVisitor {
         let mut fh = match File::open(filepath) {
@@ -118,18 +128,21 @@ impl ASTVisitor {
         }
     }
 
-    fn indent(&self) {
-        print!("{}", (0..self.level).map(|_| "  ").collect::<String>());
+    fn indent(&mut self) {
+        self.level += 1;
     }
 
-    fn traverse_item(&mut self, item: &ast::Item) {
+    fn dedent(&mut self) {
+        self.level -= 1;
+    }
+
+    fn traverse_item(&mut self, item: &Item) {
         match item.node {
-            ast::ItemKind::Fn(_, _, _, _, _, ref block_p) => {
+            ItemKind::Fn(_, _, _, _, _, ref block_p) => {
+                iprintln!(self, "+Function: {}", item.ident);
                 self.indent();
-                println!("Function: {}", item.ident);
-                self.level += 1;
                 self.traverse_block(block_p.clone().unwrap());
-                self.level -= 1;
+                self.dedent();
             }
             _ => {},
         }
@@ -137,39 +150,53 @@ impl ASTVisitor {
 
     fn print_span(&self, span: &rt::Span) {
         // print the first line of a span to help me understand
-        self.indent();
-        println!("---8<---");
         let slice = &self.source[(span.lo.0 as usize)..(span.hi.0 as usize)];
-        let lines = slice.split("\n");
-        for line in lines {
-            self.indent();
-            println!("{}", line);
-        }
-        self.indent();
-        println!("--->8---\n");
+        let mut lines = slice.split("\n");
+        iprintln!(self, "`{}`...", lines.next().unwrap());
     }
 
-    fn traverse_stmt(&mut self, stmt: &ast::Stmt) {
-        self.indent();
-        println!("Statement at char {}", stmt.span.lo.0);
+    fn traverse_stmt(&mut self, stmt: &Stmt) {
+        iprintln!(self, "+Statement at char {}", stmt.span.lo.0);
         self.print_span(&stmt.span);
-        self.level += 1;
+        self.indent();
         match stmt.node {
-            ast::StmtKind::Item(ref item_p) => {
-                self.traverse_item(&item_p.clone().unwrap());
+            StmtKind::Item(ref item_p) =>
+                self.traverse_item(&item_p.clone().unwrap()),
+            StmtKind::Expr(ref expr_p) =>
+                self.traverse_expr(&expr_p.clone().unwrap()),
+            _ => {},
+        }
+        self.dedent();
+
+    }
+
+    fn traverse_expr(&mut self, expr: &Expr) {
+        self.print_span(&expr.span);
+        match &expr.node {
+            &ExprKind::If(ref expr_p, ref blk_p, ref else_o) => {
+                iprintln!(self, "+If Expr: {} at char {}", expr.id, expr.span.lo.0);
+                self.print_span(&expr.span);
+                iprintln!(self, "True arm:");
+                self.traverse_block(blk_p.clone().unwrap());
+                match else_o {
+                    &Some(ref expr_p) => {
+                        iprintln!(self, "Else arm:");
+                        self.traverse_expr(&expr_p.clone().unwrap());
+                    }
+                    _ => {},
+                }
             }
             _ => {},
         }
-        self.level -= 1;
     }
 
-    fn traverse_block(&mut self, blk: ast::Block) {
+    fn traverse_block(&mut self, blk: Block) {
+        iprintln!(self, "+Block: {} at char {}", blk.id, blk.span.lo.0);
         self.indent();
-        println!("Block: {} at char {}", blk.id, blk.span.lo.0);
-
         for stmt in blk.stmts {
             self.traverse_stmt(&stmt);
         }
+        self.dedent();
     }
 }
 
@@ -178,7 +205,7 @@ impl<'a> visit::Visitor<'a> for ASTVisitor {
      * Hook into the AST walker, looking for functions to analyse
      */
 
-    fn visit_item(&mut self, item: &ast::Item) {
+    fn visit_item(&mut self, item: &Item) {
         self.traverse_item(item);
         visit::walk_item(self, item)
     }
