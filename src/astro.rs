@@ -11,12 +11,14 @@
 // Based on https://github.com/nrc/stupid-stats
 
 #![feature(box_syntax)]
-#![feature(rustc_private)]
+#![feature(plugin_registrar, rustc_private, plugin)]
+#![feature(quote)]
 
 extern crate getopts;
 extern crate rustc;
 extern crate rustc_driver;
 extern crate syntax;
+extern crate rustc_plugin;
 
 use rustc::session::Session;
 use rustc::session::config::{self, Input, ErrorOutputType};
@@ -29,6 +31,12 @@ use syntax::ext::quote::rt;
 use std::path::{PathBuf, Path};
 use std::fs::File;
 use std::io::prelude::*;
+//use std::io::Write;
+
+use syntax::ext::base::{ExtCtxt, SyntaxExtension, Annotatable};
+use syntax::ext::quote::rt::Span;
+use syntax::ast::MetaItem;
+use rustc_plugin::Registry;
 
 
 struct ASTDumper {
@@ -82,7 +90,7 @@ impl<'a> CompilerCalls<'a> for ASTDumper {
     fn build_controller(&mut self, _: &Session,  _: &getopts::Matches) -> driver::CompileController<'a> {
         let mut control = driver::CompileController::basic();
 
-        control.after_parse.stop = Compilation::Stop;
+        control.after_parse.stop = Compilation::Continue;
         control.after_parse.callback = box |state: &mut driver::CompileState| {
             let krate = state.krate.as_ref();
             let filepath = match state.input {
@@ -100,6 +108,7 @@ impl<'a> CompilerCalls<'a> for ASTDumper {
 struct ASTVisitor {
     level: usize,
     source: String,
+    next_id: usize,
 }
 
 // An indented println!
@@ -118,6 +127,22 @@ macro_rules! iprint {
     }};
 }
 
+fn expand_inject_block_ids(cx: &mut ExtCtxt, _: Span,
+						   _: &MetaItem, item: Annotatable) -> Vec<Annotatable> {
+
+	// XXX only enter here if it's a block.
+	let ast = quote_item!(cx, println!("hi edd")).unwrap();
+	let ann = Annotatable::Item(ast);
+	vec![ann, item]
+}
+
+#[plugin_registrar]
+pub fn plugin_registrar(reg: &mut Registry) {
+	use syntax::symbol::Symbol;
+    reg.register_syntax_extension(Symbol::intern("inject_block_id"),
+	    SyntaxExtension::MultiModifier(box(expand_inject_block_ids)));
+}
+
 impl ASTVisitor {
     fn new(filepath: &Path) -> ASTVisitor {
         let mut fh = match File::open(filepath) {
@@ -132,6 +157,7 @@ impl ASTVisitor {
         ASTVisitor {
             level: 0,
             source: source,
+            next_id: 0,
         }
     }
 
@@ -222,8 +248,8 @@ impl ASTVisitor {
     }
 
     fn traverse_block(&mut self, blk: Block) {
-        iprint!(self, "+Block");
-        self.print_span(&blk.span);
+        iprintln!(self, "+Block {}:", self.next_id);
+        self.next_id += 1;
         self.indent();
         for stmt in blk.stmts {
             self.traverse_stmt(&stmt);
@@ -248,6 +274,8 @@ impl<'a> visit::Visitor<'a> for ASTVisitor {
 }
 
 fn main() {
+	let f = File::create("compiled").unwrap();
     let args: Vec<_> = std::env::args().collect();
-    rustc_driver::run_compiler(&args, &mut ASTDumper::new(), None, None);
+    let (res, _) = rustc_driver::run_compiler(&args, &mut ASTDumper::new(), None, Some(Box::new(f)));
+	res.expect("compile errors");
 }
