@@ -1,10 +1,15 @@
 [package]
-name = "astro"
+name = "astrox"
 version = "0.1.0"
 authors = ["Edd Barrett <vext01@gmail.com>"]
 
 [[bin]]
 name = "astro"
 path = "src/astro.rs"
+
+[lib]
+name = "astrox"
+path = "src/astro.rs"
+crate-type = ["dylib"]
 
 [dependencies]
