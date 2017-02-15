@@ -133,7 +133,7 @@ macro_rules! iprint {
 }
 
 fn expand_inject_block_ids(cx: &mut ExtCtxt, _: Span,
-						   _: &MetaItem, ann_item: Annotatable) -> Vec<Annotatable> {
+                           _: &MetaItem, ann_item: Annotatable) -> Vec<Annotatable> {
 
     if let &Annotatable::Item(ref item_p) = &ann_item {
         let item = item_p.clone().unwrap();
@@ -142,32 +142,32 @@ fn expand_inject_block_ids(cx: &mut ExtCtxt, _: Span,
             let blk = blk_p.unwrap();
             let expr = quote_expr!(cx, {println!("In like flyn!"); $blk});
             let new_blk = cx.block_expr(expr);
-			let decl = decl_p.unwrap();
-			if let FunctionRetTy::Ty(ret_ty) = decl.output {
-				// Funtion has a return value
-				let new_fn_p = cx.item_fn(item.span, item.ident, decl.inputs,
-										  ret_ty, new_blk);
-				return vec![Annotatable::Item(new_fn_p)]
-			} else {
-				// Function does not return
+            let decl = decl_p.unwrap();
+            if let FunctionRetTy::Ty(ret_ty) = decl.output {
+                // Function has a return value
+                let new_fn_p = cx.item_fn(item.span, item.ident, decl.inputs,
+                                          ret_ty, new_blk);
+                return vec![Annotatable::Item(new_fn_p)]
+            } else {
+                // Function does not return
 
-				// Bug(?) in astbuilder.item_fn() means we cant make a function
-				// with no return value:
-				//    let new_fn_p = cx.item_fn(item.span, item.ident,
-				//                              decl.inputs, ???, new_blk);
-				let new_fn_kind = ItemKind::Fn(P(decl), unsafety,
-											   spanned_const, abi, generics,
-											   new_blk);
-				let new_fn = Item {
-					ident: item.ident,
-					attrs: item.attrs,
-					id: item.id,
-					node: new_fn_kind,
-					vis: item.vis,
-					span: item.span
-				};
-				return vec![Annotatable::Item(P(new_fn))]
-			}
+                // Bug(?) in astbuilder.item_fn() means we cant make a function
+                // with no return value:
+                //    let new_fn_p = cx.item_fn(item.span, item.ident,
+                //                              decl.inputs, ???, new_blk);
+                let new_fn_kind = ItemKind::Fn(P(decl), unsafety,
+                                               spanned_const, abi, generics,
+                                               new_blk);
+                let new_fn = Item {
+                    ident: item.ident,
+                    attrs: item.attrs,
+                    id: item.id,
+                    node: new_fn_kind,
+                    vis: item.vis,
+                    span: item.span
+                };
+                return vec![Annotatable::Item(P(new_fn))]
+            }
         }
     }
 
@@ -177,8 +177,9 @@ fn expand_inject_block_ids(cx: &mut ExtCtxt, _: Span,
 
 #[plugin_registrar]
 pub fn plugin_registrar(reg: &mut Registry) {
-    reg.register_syntax_extension(Symbol::intern("inject_block_id"),
-	    SyntaxExtension::MultiModifier(box(expand_inject_block_ids)));
+    reg.register_syntax_extension(
+        Symbol::intern("inject_block_id"),
+        SyntaxExtension::MultiModifier(box(expand_inject_block_ids)));
 }
 
 impl ASTVisitor {
@@ -312,8 +313,9 @@ impl<'a> visit::Visitor<'a> for ASTVisitor {
 }
 
 fn main() {
-	let f = File::create("compiled").unwrap();
+    let f = File::create("compiled").unwrap();
     let args: Vec<_> = std::env::args().collect();
-    let (res, _) = rustc_driver::run_compiler(&args, &mut ASTDumper::new(), None, Some(Box::new(f)));
-	res.expect("compile errors");
+    let (res, _) = rustc_driver::run_compiler(&args, &mut ASTDumper::new(),
+                                              None, Some(Box::new(f)));
+    res.expect("compile errors");
 }
