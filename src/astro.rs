@@ -24,19 +24,24 @@ use rustc::session::Session;
 use rustc::session::config::{self, Input, ErrorOutputType};
 use rustc_driver::{driver, CompilerCalls, Compilation, RustcDefaultCalls};
 
-use syntax::ast::{Expr, ExprKind, Stmt, StmtKind, Block, Item, ItemKind};
+use syntax::ast::{Expr, ExprKind, Stmt, StmtKind, Block, Item, ItemKind, Ident, FunctionRetTy};
 use syntax::{ast, visit, errors};
 use syntax::ext::quote::rt;
 
 use std::path::{PathBuf, Path};
 use std::fs::File;
 use std::io::prelude::*;
+use syntax::symbol::Symbol;
+use syntax::ext::build::AstBuilder;
+use syntax::ptr::P;
+
 //use std::io::Write;
 
 use syntax::ext::base::{ExtCtxt, SyntaxExtension, Annotatable};
 use syntax::ext::quote::rt::Span;
 use syntax::ast::MetaItem;
 use rustc_plugin::Registry;
+use syntax::codemap;
 
 
 struct ASTDumper {
@@ -128,17 +133,50 @@ macro_rules! iprint {
 }
 
 fn expand_inject_block_ids(cx: &mut ExtCtxt, _: Span,
-						   _: &MetaItem, item: Annotatable) -> Vec<Annotatable> {
+						   _: &MetaItem, ann_item: Annotatable) -> Vec<Annotatable> {
 
-	// XXX only enter here if it's a block.
-	let ast = quote_item!(cx, println!("hi edd")).unwrap();
-	let ann = Annotatable::Item(ast);
-	vec![ann, item]
+    if let &Annotatable::Item(ref item_p) = &ann_item {
+        let item = item_p.clone().unwrap();
+        let node = item.node;
+        if let ItemKind::Fn(decl_p, unsafety, spanned_const, abi, generics, blk_p) = node {
+            let blk = blk_p.unwrap();
+            let expr = quote_expr!(cx, {println!("In like flyn!"); $blk});
+            let new_blk = cx.block_expr(expr);
+			let decl = decl_p.unwrap();
+			if let FunctionRetTy::Ty(ret_ty) = decl.output {
+				// Funtion has a return value
+				let new_fn_p = cx.item_fn(item.span, item.ident, decl.inputs,
+										  ret_ty, new_blk);
+				return vec![Annotatable::Item(new_fn_p)]
+			} else {
+				// Function does not return
+
+				// Bug(?) in astbuilder.item_fn() means we cant make a function
+				// with no return value:
+				//    let new_fn_p = cx.item_fn(item.span, item.ident,
+				//                              decl.inputs, ???, new_blk);
+				let new_fn_kind = ItemKind::Fn(P(decl), unsafety,
+											   spanned_const, abi, generics,
+											   new_blk);
+				let new_fn = Item {
+					ident: item.ident,
+					attrs: item.attrs,
+					id: item.id,
+					node: new_fn_kind,
+					vis: item.vis,
+					span: item.span
+				};
+				return vec![Annotatable::Item(P(new_fn))]
+			}
+        }
+    }
+
+    // default case, do nothing
+    vec![ann_item]
 }
 
 #[plugin_registrar]
 pub fn plugin_registrar(reg: &mut Registry) {
-	use syntax::symbol::Symbol;
     reg.register_syntax_extension(Symbol::intern("inject_block_id"),
 	    SyntaxExtension::MultiModifier(box(expand_inject_block_ids)));
 }
