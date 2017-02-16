@@ -20,38 +20,60 @@ extern crate rustc_driver;
 extern crate syntax;
 extern crate rustc_plugin;
 
-use syntax::ast::{Item, ItemKind, MetaItem};
+use syntax::ast::{Item, ItemKind, MetaItem, Mod};
 use syntax::ext::base::{ExtCtxt, SyntaxExtension, Annotatable};
-use syntax::ext::build::AstBuilder;
 use syntax::ext::quote::rt::Span;
 use syntax::ptr::P;
 use syntax::symbol::Symbol;
 use rustc_plugin::Registry;
 
+struct ModifyCtxt<'a> {
+    next_blk_id: usize,
+    module_name: &'a str,
+}
+
+impl<'a> ModifyCtxt<'a> {
+    fn new(cx: &ExtCtxt) -> ModifyCtxt<'a> {
+        ModifyCtxt {
+            next_blk_id: 0,
+            module_name: cx.crate_root.expect("no module name!")
+        }
+    }
+
+    /*
+     * Modification starts here
+     */
+    fn modify(&mut self, modu: Mod) -> Mod {
+        // XXX
+        let mut new_item_ps = Vec::new();
+        for item_p in modu.items {
+            new_item_ps.push(self.modify_item_p(item_p));
+        }
+        Mod{items: new_item_ps, .. modu}
+    }
+
+    fn modify_item(&mut self, item: Item) -> Item {
+        // XXX
+        item
+    }
+
+    fn modify_item_p(&mut self, item_p: P<Item>) -> P<Item> {
+        let item = item_p.clone().unwrap();
+        P(self.modify_item(item))
+    }
+}
 
 fn expand_inject_block_ids(cx: &mut ExtCtxt, _: Span,
                            _: &MetaItem, ann_item: Annotatable) -> Vec<Annotatable> {
-
     if let &Annotatable::Item(ref item_p) = &ann_item {
         let item = item_p.clone().unwrap();
-        let node = item.node;
-        if let ItemKind::Fn(decl_p, unsafety, spanned_const, abi, generics, blk_p) = node {
-            let blk = blk_p.unwrap();
-            let expr = quote_expr!(cx, {println!("In like flyn!"); $blk});
-            let new_blk = cx.block_expr(expr);
-            let decl = decl_p.unwrap();
-            let new_fn_kind = ItemKind::Fn(P(decl), unsafety,
-                                           spanned_const, abi, generics,
-                                           new_blk);
-            let new_fn = Item {
-                ident: item.ident,
-                attrs: item.attrs,
-                id: item.id,
-                node: new_fn_kind,
-                vis: item.vis,
-                span: item.span
-            };
-            return vec![Annotatable::Item(P(new_fn))]
+        if let ItemKind::Mod(modu) = item.node {
+            let mut mc = ModifyCtxt::new(cx);
+            let new_mod = mc.modify(modu);
+            let new_item = Item{node: ItemKind::Mod(new_mod), .. item};
+            return vec![Annotatable::Item(P(new_item))];
+        } else {
+            panic!("Plugin applies only at the module level");
         }
     }
 
