@@ -143,31 +143,18 @@ fn expand_inject_block_ids(cx: &mut ExtCtxt, _: Span,
             let expr = quote_expr!(cx, {println!("In like flyn!"); $blk});
             let new_blk = cx.block_expr(expr);
             let decl = decl_p.unwrap();
-            if let FunctionRetTy::Ty(ret_ty) = decl.output {
-                // Function has a return value
-                let new_fn_p = cx.item_fn(item.span, item.ident, decl.inputs,
-                                          ret_ty, new_blk);
-                return vec![Annotatable::Item(new_fn_p)]
-            } else {
-                // Function does not return
-
-                // Bug(?) in astbuilder.item_fn() means we cant make a function
-                // with no return value:
-                //    let new_fn_p = cx.item_fn(item.span, item.ident,
-                //                              decl.inputs, ???, new_blk);
-                let new_fn_kind = ItemKind::Fn(P(decl), unsafety,
-                                               spanned_const, abi, generics,
-                                               new_blk);
-                let new_fn = Item {
-                    ident: item.ident,
-                    attrs: item.attrs,
-                    id: item.id,
-                    node: new_fn_kind,
-                    vis: item.vis,
-                    span: item.span
-                };
-                return vec![Annotatable::Item(P(new_fn))]
-            }
+            let new_fn_kind = ItemKind::Fn(P(decl), unsafety,
+                                           spanned_const, abi, generics,
+                                           new_blk);
+            let new_fn = Item {
+                ident: item.ident,
+                attrs: item.attrs,
+                id: item.id,
+                node: new_fn_kind,
+                vis: item.vis,
+                span: item.span
+            };
+            return vec![Annotatable::Item(P(new_fn))]
         }
     }
 
