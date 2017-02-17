@@ -20,7 +20,7 @@ extern crate rustc_driver;
 extern crate syntax;
 extern crate rustc_plugin;
 
-use syntax::ast::{Item, ItemKind, MetaItem, Mod, Block, Stmt};
+use syntax::ast::{Item, ItemKind, MetaItem, Mod, Block, Stmt, StmtKind};
 use syntax::ext::base::{ExtCtxt, SyntaxExtension, Annotatable};
 use syntax::ext::quote::rt::Span;
 use syntax::ptr::P;
@@ -74,9 +74,10 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
     }
 
     fn modify_item(&mut self, item: Item) -> Item {
+        iprintln!(self, "+Item: {:?}", &item);
         match item.node {
             ItemKind::Fn(decl_p, unsafety, spanned_const, abi, generics, block_p) => {
-                iprintln!(self, "+Function {} {}", item.ident, self.span_str(&item.span));
+                iprintln!(self, "\n+Function {}", &item.ident);
                 let new_blk = self.modify_block(block_p.clone().unwrap());
                 let new_itemkind = ItemKind::Fn(decl_p, unsafety, spanned_const, abi, generics, P(new_blk));
                 return Item{node: new_itemkind, ..item}
@@ -110,7 +111,19 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
     }
 
     fn modify_stmt(&mut self, stmt: Stmt) -> Stmt {
-        stmt
+        iprintln!(self, "+Stmt: {:?}", &stmt);
+        match stmt.node {
+            StmtKind::Item(item_p) => {
+                let new_item = self.modify_item_p(item_p);
+                let new_stmtkind = StmtKind::Item(new_item);
+                return Stmt{node: new_stmtkind, ..stmt}
+            },
+            _ => {
+                // XXX many other types
+                iprintln!(self, "+Unknown: {:?}", stmt);
+                return stmt
+            },
+        }
     }
 }
 
