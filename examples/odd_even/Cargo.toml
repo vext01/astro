@@ -1,0 +1,8 @@
+[package]
+name = "odd_even"
+version = "0.1.0"
+authors = ["Edd Barrett <vext01@gmail.com>"]
+
+[dependencies]
+astrox = { path="../.." }
+rand = "0.3.15"
