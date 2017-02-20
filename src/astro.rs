@@ -167,6 +167,24 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
                 let new_exprkind = ExprKind::Loop(new_blk_p, spanned_indent_o);
                 return Expr{node: new_exprkind, ..expr};
             },
+            ExprKind::If(expr_p, true_blk_p, false_expr_o) => {
+                iprintln!(self, "+If");
+                let new_true_blk_p = self.modify_block_p(true_blk_p);
+                let new_false_expr_o = match false_expr_o {
+                    Some(false_expr_p) => {
+                        Some(self.modify_expr_p(false_expr_p))
+                    },
+                    None => None,
+                };
+                let new_exprkind = ExprKind::If(
+                    expr_p, new_true_blk_p, new_false_expr_o);
+                return Expr{node: new_exprkind, ..expr};
+            },
+            ExprKind::Block(blk_p) => {
+                let new_blk_p = self.modify_block_p(blk_p);
+                let new_exprkind = ExprKind::Block(new_blk_p);
+                return Expr{node: new_exprkind, ..expr};
+            },
             _ => {
                 println!("unhandled expr kind");
                 return expr;
