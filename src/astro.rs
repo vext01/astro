@@ -115,20 +115,23 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
     }
 
     fn modify_block(&mut self, blk: Block) -> Block {
-        iprintln!(self, "+Block {}", self.span_str(&blk.span));
-        self.indent_level += 1;
-
         let id = self.next_blk_id;
-        let rv = quote_block!(self.ext_ctxt, {
-            println!("runtime: enter block: {}", $id); $blk
-        }).unwrap();
         self.next_blk_id += 1;
+        iprintln!(self, "+Block #{} {}", id, self.span_str(&blk.span));
 
-        for stmt in blk.stmts {
-            self.modify_stmt(stmt);
+        // Add our extra code here
+        let println_stmt = quote_stmt!(self.ext_ctxt, {
+            println!("*** Enter block #{}", $id); $blk
+        }).unwrap();
+        let mut new_stmts = vec![println_stmt];
+
+        // continue modifying the children of the block
+        self.indent_level += 1;
+        for stmt in blk.stmts.clone() {
+            new_stmts.push(self.modify_stmt(stmt));
         }
         self.indent_level -= 1;
-        rv
+        Block{stmts: new_stmts, ..blk}
     }
 
     fn modify_block_p(&mut self, blk_p: P<Block>) -> P<Block> {
