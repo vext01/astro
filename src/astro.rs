@@ -122,7 +122,7 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
         // Add our extra code here
         let println_stmt = quote_stmt!(self.ext_ctxt, {
             println!("*** Enter block #{}", $id); $blk
-        }).unwrap();
+        }).expect("can't make quoted stmt");
         let mut new_stmts = vec![println_stmt];
 
         // continue modifying the children of the block
