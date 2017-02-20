@@ -20,7 +20,7 @@ extern crate rustc_driver;
 extern crate syntax;
 extern crate rustc_plugin;
 
-use syntax::ast::{Item, ItemKind, MetaItem, Mod, Block, Stmt, StmtKind};
+use syntax::ast::{Item, ItemKind, MetaItem, Mod, Block, Stmt, StmtKind, Expr, ExprKind};
 use syntax::ext::base::{ExtCtxt, SyntaxExtension, Annotatable};
 use syntax::ext::quote::rt::Span;
 use syntax::ptr::P;
@@ -97,7 +97,7 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
         iprintln!(self, "+Item: {}", self.span_str(&item.span));
         match item.node {
             ItemKind::Fn(decl_p, unsafety, spanned_const, abi, generics, block_p) => {
-                iprintln!(self, "\n+Function {}", &item.ident);
+                iprintln!(self, "+Function {}", &item.ident);
                 let new_blk = self.modify_block(block_p.clone().unwrap());
                 let new_itemkind = ItemKind::Fn(decl_p, unsafety, spanned_const, abi, generics, P(new_blk));
                 return Item{node: new_itemkind, ..item}
@@ -131,6 +131,10 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
         rv
     }
 
+    fn modify_block_p(&mut self, blk_p: P<Block>) -> P<Block> {
+        P(self.modify_block(blk_p.clone().unwrap()))
+    }
+
     fn modify_stmt(&mut self, stmt: Stmt) -> Stmt {
         iprintln!(self, "+Stmt: {}", self.span_str(&stmt.span));
         match stmt.node {
@@ -139,12 +143,36 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
                 let new_stmtkind = StmtKind::Item(new_item);
                 return Stmt{node: new_stmtkind, ..stmt}
             },
+            StmtKind::Expr(expr) => {
+                let new_expr_p = self.modify_expr_p(expr);
+                let new_stmtkind = StmtKind::Expr(new_expr_p);
+                return Stmt{node: new_stmtkind, ..stmt};
+            },
             _ => {
-                // XXX many other types
                 iprintln!(self, "unhandled statement kind");
                 return stmt
             },
         }
+    }
+
+    fn modify_expr(&mut self, expr: Expr) -> Expr {
+        iprintln!(self, "+Expr: {}", self.span_str(&expr.span));
+        match expr.node {
+            ExprKind::Loop(blk_p, spanned_indent_o) => {
+                iprintln!(self, "+Loop");
+                let new_blk_p = self.modify_block_p(blk_p);
+                let new_exprkind = ExprKind::Loop(new_blk_p, spanned_indent_o);
+                return Expr{node: new_exprkind, ..expr};
+            },
+            _ => {
+                println!("unhandled expr kind");
+                return expr;
+            }
+        }
+    }
+
+    fn modify_expr_p(&mut self, expr_p: P<Expr>) -> P<Expr> {
+        P(self.modify_expr(expr_p.clone().unwrap()))
     }
 }
 
