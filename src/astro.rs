@@ -58,8 +58,28 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
         }
     }
 
+    /* Format a span as a string (two lines at most) */
     fn span_str(&self, span: &Span) -> String {
-        self.ext_ctxt.codemap().span_to_string(*span)
+        let codemap = self.ext_ctxt.codemap();
+        let mut ret = String::new();
+        ret.push_str(&codemap.span_to_string(*span));
+        ret.push_str(": `");
+        match codemap.span_to_snippet(*span) {
+            Ok(snippet) => {
+                let mut lines = snippet.split("\n");
+                let mut left = 2;
+                while left > 0 {
+                    match lines.next() {
+                        Some(x) => ret.push_str(x.trim()),
+                        None => break
+                    }
+                    left -= 1;
+                }
+            },
+            _ => ret.push_str("???"),
+        }
+        ret.push_str("`");
+        ret
     }
 
     /*
@@ -74,18 +94,19 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
     }
 
     fn modify_item(&mut self, item: Item) -> Item {
-        iprintln!(self, "+Item: {:?}", &item);
+        iprintln!(self, "+Item: {}", self.span_str(&item.span));
         match item.node {
             ItemKind::Fn(decl_p, unsafety, spanned_const, abi, generics, block_p) => {
                 iprintln!(self, "\n+Function {}", &item.ident);
                 let new_blk = self.modify_block(block_p.clone().unwrap());
                 let new_itemkind = ItemKind::Fn(decl_p, unsafety, spanned_const, abi, generics, P(new_blk));
                 return Item{node: new_itemkind, ..item}
+            },
+            _ => {
+                iprintln!(self, "unhandled item kind");
+                return item;
             }
-            _ => {},
         }
-        // default case
-        item
     }
 
     fn modify_item_p(&mut self, item_p: P<Item>) -> P<Item> {
@@ -111,7 +132,7 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
     }
 
     fn modify_stmt(&mut self, stmt: Stmt) -> Stmt {
-        iprintln!(self, "+Stmt: {:?}", &stmt);
+        iprintln!(self, "+Stmt: {}", self.span_str(&stmt.span));
         match stmt.node {
             StmtKind::Item(item_p) => {
                 let new_item = self.modify_item_p(item_p);
@@ -120,7 +141,7 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
             },
             _ => {
                 // XXX many other types
-                iprintln!(self, "+Unknown: {:?}", stmt);
+                iprintln!(self, "unhandled statement kind");
                 return stmt
             },
         }
