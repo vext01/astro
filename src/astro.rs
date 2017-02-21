@@ -190,6 +190,12 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
                 let new_exprkind = ExprKind::Block(new_blk_p);
                 return Expr{node: new_exprkind, ..expr};
             },
+            ExprKind::While(expr_p, blk_p, spanned_indent_o) => {
+                let new_blk_p = self.modify_block_p(blk_p);
+                let new_exprkind = ExprKind::While(expr_p, new_blk_p,
+                                                   spanned_indent_o);
+                return Expr{node: new_exprkind, ..expr};
+            },
             _ => {
                 println!("unhandled expr kind");
                 return expr;
