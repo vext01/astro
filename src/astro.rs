@@ -145,32 +145,25 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
 
     fn modify_stmt(&mut self, stmt: Stmt) -> Stmt {
         iprintln!(self, "+Stmt: {}", self.span_str(&stmt.span));
-        match stmt.node {
-            StmtKind::Item(item_p) => {
-                let new_item = self.modify_item_p(item_p);
-                let new_stmtkind = StmtKind::Item(new_item);
-                return Stmt{node: new_stmtkind, ..stmt}
-            },
-            StmtKind::Expr(expr) => {
-                let new_expr_p = self.modify_expr_p(expr);
-                let new_stmtkind = StmtKind::Expr(new_expr_p);
-                return Stmt{node: new_stmtkind, ..stmt};
-            },
+        let new_stmtkind = match stmt.node {
+            StmtKind::Item(item_p) =>
+                StmtKind::Item(self.modify_item_p(item_p)),
+            StmtKind::Expr(expr) =>
+                StmtKind::Expr(self.modify_expr_p(expr)),
             _ => {
-                iprintln!(self, "unhandled statement kind");
-                return stmt
+                iprintln!(self, "unhandled StmtKind");
+                stmt.node
             },
-        }
+        };
+        Stmt{node: new_stmtkind, ..stmt}
     }
 
     fn modify_expr(&mut self, expr: Expr) -> Expr {
         iprintln!(self, "+Expr: {}", self.span_str(&expr.span));
-        match expr.node {
+        let new_exprkind = match expr.node {
             ExprKind::Loop(blk_p, spanned_indent_o) => {
                 iprintln!(self, "+Loop");
-                let new_blk_p = self.modify_block_p(blk_p);
-                let new_exprkind = ExprKind::Loop(new_blk_p, spanned_indent_o);
-                return Expr{node: new_exprkind, ..expr};
+                ExprKind::Loop(self.modify_block_p(blk_p),  spanned_indent_o)
             },
             ExprKind::If(expr_p, true_blk_p, false_expr_o) => {
                 iprintln!(self, "+If");
@@ -181,26 +174,21 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
                     },
                     None => None,
                 };
-                let new_exprkind = ExprKind::If(
-                    expr_p, new_true_blk_p, new_false_expr_o);
-                return Expr{node: new_exprkind, ..expr};
+                ExprKind::If(expr_p, new_true_blk_p, new_false_expr_o)
             },
             ExprKind::Block(blk_p) => {
-                let new_blk_p = self.modify_block_p(blk_p);
-                let new_exprkind = ExprKind::Block(new_blk_p);
-                return Expr{node: new_exprkind, ..expr};
+                ExprKind::Block(self.modify_block_p(blk_p))
             },
             ExprKind::While(expr_p, blk_p, spanned_indent_o) => {
                 let new_blk_p = self.modify_block_p(blk_p);
-                let new_exprkind = ExprKind::While(expr_p, new_blk_p,
-                                                   spanned_indent_o);
-                return Expr{node: new_exprkind, ..expr};
+                ExprKind::While(expr_p, new_blk_p, spanned_indent_o)
             },
             _ => {
                 println!("unhandled expr kind");
-                return expr;
+                expr.node
             }
-        }
+        };
+        Expr{node: new_exprkind, ..expr}
     }
 
     fn modify_expr_p(&mut self, expr_p: P<Expr>) -> P<Expr> {
