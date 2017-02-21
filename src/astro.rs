@@ -20,7 +20,9 @@ extern crate rustc_driver;
 extern crate syntax;
 extern crate rustc_plugin;
 
-use syntax::ast::{Item, ItemKind, MetaItem, Mod, Block, Stmt, StmtKind, Expr, ExprKind};
+use syntax::ast::{
+    Item, ItemKind, MetaItem, Mod, Block, Stmt, StmtKind, Expr, ExprKind
+};
 use syntax::ext::base::{ExtCtxt, SyntaxExtension, Annotatable};
 use syntax::ext::quote::rt::Span;
 use syntax::ptr::P;
@@ -96,7 +98,8 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
     fn modify_item(&mut self, item: Item) -> Item {
         iprintln!(self, "+Item: {}", self.span_str(&item.span));
         match item.node {
-            ItemKind::Fn(decl_p, unsafety, spanned_const, abi, generics, block_p) => {
+            ItemKind::Fn(decl_p, unsafety, spanned_const, abi, generics,
+                         block_p) => {
                 iprintln!(self, "+Function {}", &item.ident);
                 let new_blk_p = self.modify_block_p(block_p);
                 let new_itemkind = ItemKind::Fn(decl_p, unsafety,
@@ -200,11 +203,11 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
 }
 
 fn expand_inject_block_ids(cx: &mut ExtCtxt, _: Span,
-                           _: &MetaItem, ann_item: Annotatable) -> Vec<Annotatable> {
+                           _: &MetaItem, ann_item: Annotatable)-> Vec<Annotatable> {
     if let Annotatable::Item(item_p) = ann_item {
         let item = item_p.unwrap();
         if let ItemKind::Mod(modu) = item.node {
-            let mut mc = ModifyCtxt::new(cx); //, &mod_name);
+            let mut mc = ModifyCtxt::new(cx);
             let new_mod = mc.modify(modu);
             let new_item = Item{node: ItemKind::Mod(new_mod), .. item};
             return vec![Annotatable::Item(P(new_item))];
