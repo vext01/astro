@@ -214,9 +214,91 @@ fn expand_inject_block_ids(cx: &mut ExtCtxt, _: Span,
     vec![ann_item]
 }
 
+/*
+ * Find and add code for the JIT merge point.
+ *
+ * The loop must be the first `loop' statement in the top-level scope of the
+ * annotated function.
+ */
+fn expand_jit_merge_point(ext_ctxt: &mut ExtCtxt, _: Span,
+                           _: &MetaItem, ann_item: Annotatable)-> Vec<Annotatable> {
+    if let Annotatable::Item(item_p) = ann_item {
+        let item = item_p.unwrap();
+        if let ItemKind::Fn(decl, unsafety, spanned_const, abi, generics, func_blk_p) = item.node {
+            match modify_interp_loop(ext_ctxt, func_blk_p) {
+                Ok(new_func_blk_p) => {
+                    let new_fn_itemkind = ItemKind::Fn(decl, unsafety, spanned_const, abi, generics, new_func_blk_p);
+                    let new_item = Item{node: new_fn_itemkind, .. item};
+                    return vec![Annotatable::Item(P(new_item))];
+                },
+                _ => panic!("Failed to find interpreter loop"),
+            }
+        }
+    }
+    // If we get here, the user annotated the wrong thing
+    panic!("#[jit_merge_point] must annotate a function");
+}
+
+fn modify_interp_loop(ext_ctxt: &ExtCtxt, func_blk_p: P<Block>) -> Result<P<Block>, ()> {
+    /*
+     * Count statements before the interpreter loop (if we find it), so that
+     * later we can add our own code immediately before the loop.
+     */
+    let mut stmts = Vec::new();
+    let mut found = false;
+    let func_blk = func_blk_p.unwrap();
+
+    for stmt in func_blk.stmts {
+        match stmt.clone().node {
+            StmtKind::Expr(expr_p) => {
+                let loop_expr = expr_p.unwrap();
+                if let ExprKind::Loop(loop_blk_p, spanned_o) = loop_expr.node {
+                    // We found the interpreter loop, now add code
+                    found = true;
+                    let loop_stmt = stmt; // for readability of remainder
+
+                    // Add code before entering interp loop
+                    let pre_stmt = quote_stmt!(ext_ctxt, {
+                        {
+                            println!(">>> Pre interpreter loop");
+                        }
+                    }).expect("failed to quote");
+                    stmts.push(pre_stmt);
+
+                    // Add code inside the interpreter loop
+                    let inside_stmt = quote_stmt!(ext_ctxt, {
+                        {
+                            println!(">>> JIT merge point");
+                        }
+                    }).expect("failed to quote");
+                    let mut inside_stmts = vec![inside_stmt];
+                    let loop_blk = loop_blk_p.unwrap();
+                    inside_stmts.extend(loop_blk.stmts);
+                    let new_inside_blk_p = P(
+                        Block{stmts: inside_stmts, ..loop_blk});
+                    let new_loop_exprkind = ExprKind::Loop(new_inside_blk_p, spanned_o);
+                    let new_loop_expr = Expr{node: new_loop_exprkind, ..loop_expr};
+                    let new_loop_stmtkind = StmtKind::Expr(P(new_loop_expr));
+                    stmts.push(Stmt{node: new_loop_stmtkind, ..loop_stmt});
+                } else {
+                    stmts.push(stmt);
+                }
+            },
+            _ => stmts.push(stmt),
+        }
+    }
+    match found {
+        true => Ok(P(Block{stmts: stmts, ..func_blk})),
+        false => Err(()),
+    }
+}
+
 #[plugin_registrar]
 pub fn plugin_registrar(reg: &mut Registry) {
     reg.register_syntax_extension(
         Symbol::intern("inject_block_id"),
         SyntaxExtension::MultiModifier(box expand_inject_block_ids));
+    reg.register_syntax_extension(
+        Symbol::intern("jit_merge_point"),
+        SyntaxExtension::MultiModifier(box expand_jit_merge_point));
 }
