@@ -98,8 +98,10 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
         match item.node {
             ItemKind::Fn(decl_p, unsafety, spanned_const, abi, generics, block_p) => {
                 iprintln!(self, "+Function {}", &item.ident);
-                let new_blk = self.modify_block(block_p.clone().unwrap());
-                let new_itemkind = ItemKind::Fn(decl_p, unsafety, spanned_const, abi, generics, P(new_blk));
+                let new_blk_p = self.modify_block_p(block_p);
+                let new_itemkind = ItemKind::Fn(decl_p, unsafety,
+                                                spanned_const, abi, generics,
+                                                new_blk_p);
                 return Item{node: new_itemkind, ..item}
             },
             _ => {
@@ -110,7 +112,7 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
     }
 
     fn modify_item_p(&mut self, item_p: P<Item>) -> P<Item> {
-        let item = item_p.clone().unwrap();
+        let item = item_p.unwrap();
         P(self.modify_item(item))
     }
 
@@ -127,7 +129,7 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
 
         // continue modifying the children of the block
         self.indent_level += 1;
-        for stmt in blk.stmts.clone() {
+        for stmt in blk.stmts {
             new_stmts.push(self.modify_stmt(stmt));
         }
         self.indent_level -= 1;
@@ -135,7 +137,7 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
     }
 
     fn modify_block_p(&mut self, blk_p: P<Block>) -> P<Block> {
-        P(self.modify_block(blk_p.clone().unwrap()))
+        P(self.modify_block(blk_p.unwrap()))
     }
 
     fn modify_stmt(&mut self, stmt: Stmt) -> Stmt {
@@ -193,14 +195,14 @@ impl<'a, 'ctx> ModifyCtxt<'a, 'ctx> {
     }
 
     fn modify_expr_p(&mut self, expr_p: P<Expr>) -> P<Expr> {
-        P(self.modify_expr(expr_p.clone().unwrap()))
+        P(self.modify_expr(expr_p.unwrap()))
     }
 }
 
 fn expand_inject_block_ids(cx: &mut ExtCtxt, _: Span,
                            _: &MetaItem, ann_item: Annotatable) -> Vec<Annotatable> {
-    if let &Annotatable::Item(ref item_p) = &ann_item {
-        let item = item_p.clone().unwrap();
+    if let Annotatable::Item(item_p) = ann_item {
+        let item = item_p.unwrap();
         if let ItemKind::Mod(modu) = item.node {
             let mut mc = ModifyCtxt::new(cx); //, &mod_name);
             let new_mod = mc.modify(modu);
