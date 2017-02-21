@@ -5,18 +5,18 @@
 extern crate rand;
 
 fn main() {
-    let mut y = 0;
+    let mut flips = 0;
+    let mut heads = 10;
 
-    loop {
-        let x: u8 = rand::random();
-        println!("x={}", x);
-        if x % 2 == 0 {
-            println!("even!");
-            break;
+    while heads > 0 {
+        flips += 1;
+        let side: bool = rand::random();
+        if side {
+            heads -= 1;
+            println!("Flip number {}: heads! {} more to go", flips, heads);
         } else {
-            println!("odd");
-            y += 1;
+            println!("Flip number {}: tails, too bad", flips);
         }
     }
-    println!("{} tries", y);
+    println!("Done in {} flips", flips);
 }
